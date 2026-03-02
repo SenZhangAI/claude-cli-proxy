@@ -1,0 +1,12 @@
+{
+  "name": "claude-cli-proxy",
+  "version": "0.1.0",
+  "description": "Lightweight OpenAI-compatible proxy for Claude Code CLI",
+  "type": "module",
+  "bin": {
+    "claude-cli-proxy": "./proxy.mjs"
+  },
+  "main": "proxy.mjs",
+  "keywords": ["claude", "openai", "proxy", "api", "cli"],
+  "license": "MIT"
+}
