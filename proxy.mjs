@@ -44,24 +44,28 @@ function resolveModel(requested) {
   return MODEL_MAP[requested] || requested;
 }
 
-function messagesToPrompt(messages) {
-  const parts = [];
+function parseMessages(messages) {
+  const systemParts = [];
+  const promptParts = [];
   for (const msg of messages) {
     switch (msg.role) {
       case 'system':
-        parts.push(`<system>\n${msg.content}\n</system>`);
+        systemParts.push(msg.content);
         break;
       case 'user':
-        parts.push(typeof msg.content === 'string'
+        promptParts.push(typeof msg.content === 'string'
           ? msg.content
           : msg.content.map(c => c.text || '').join('\n'));
         break;
       case 'assistant':
-        parts.push(`<previous_response>\n${msg.content}\n</previous_response>`);
+        promptParts.push(`<previous_response>\n${msg.content}\n</previous_response>`);
         break;
     }
   }
-  return parts.join('\n\n');
+  return {
+    systemPrompt: systemParts.join('\n\n') || null,
+    prompt: promptParts.join('\n\n'),
+  };
 }
 
 function makeCompletionResponse(id, model, content, usage) {
@@ -97,13 +101,14 @@ function makeChunk(id, model, delta, finishReason) {
   };
 }
 
-function buildCliArgs(model, streaming) {
+function buildCliArgs(model, streaming, systemPrompt) {
   const args = [
     '-p',
     '--model', model,
     '--setting-sources', '',
     '--strict-mcp-config',
     '--tools', '',
+    '--system-prompt', systemPrompt || 'You are a helpful assistant.',
     '--max-budget-usd', MAX_BUDGET,
   ];
   if (streaming) {
@@ -185,24 +190,24 @@ async function handleCompletions(req, res) {
   const model = resolveModel(body.model);
   const requestModel = body.model || `claude-${DEFAULT_MODEL}-4`;
   const streaming = body.stream === true;
-  const prompt = messagesToPrompt(body.messages);
+  const { systemPrompt, prompt } = parseMessages(body.messages);
   const requestId = `chatcmpl-${randomUUID()}`;
 
   activeRequests++;
 
   try {
     if (streaming) {
-      await handleStreaming(res, prompt, model, requestModel, requestId);
+      await handleStreaming(res, prompt, model, requestModel, requestId, systemPrompt);
     } else {
-      await handleNonStreaming(res, prompt, model, requestModel, requestId);
+      await handleNonStreaming(res, prompt, model, requestModel, requestId, systemPrompt);
     }
   } finally {
     activeRequests--;
   }
 }
 
-function spawnClaude(model, streaming, prompt) {
-  const args = buildCliArgs(model, streaming);
+function spawnClaude(model, streaming, prompt, systemPrompt) {
+  const args = buildCliArgs(model, streaming, systemPrompt);
   const proc = spawn('claude', args, {
     stdio: ['pipe', 'pipe', 'pipe'],
     env: { ...process.env, CLAUDECODE: undefined },
@@ -218,9 +223,9 @@ function spawnClaude(model, streaming, prompt) {
   return proc;
 }
 
-function handleNonStreaming(res, prompt, model, requestModel, requestId) {
+function handleNonStreaming(res, prompt, model, requestModel, requestId, systemPrompt) {
   return new Promise((resolve) => {
-    const proc = spawnClaude(model, false, prompt);
+    const proc = spawnClaude(model, false, prompt, systemPrompt);
     let stdout = '';
     let stderr = '';
     let settled = false;
@@ -264,9 +269,9 @@ function handleNonStreaming(res, prompt, model, requestModel, requestId) {
   });
 }
 
-function handleStreaming(res, prompt, model, requestModel, requestId) {
+function handleStreaming(res, prompt, model, requestModel, requestId, systemPrompt) {
   return new Promise((resolve) => {
-    const proc = spawnClaude(model, true, prompt);
+    const proc = spawnClaude(model, true, prompt, systemPrompt);
     let buffer = '';
     let settled = false;
     let firstChunkSent = false;
