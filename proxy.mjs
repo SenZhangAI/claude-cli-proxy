@@ -286,9 +286,16 @@ function handleStreaming(res, prompt, model, requestModel, requestId, systemProm
     res.flushHeaders();
     res.write(':ok\n\n');
 
+    // Send periodic keep-alive comments to prevent client body timeout
+    // (Node.js undici/fetch has a body timeout that fires when no data is received)
+    const keepAlive = setInterval(() => {
+      if (!settled) res.write(':keepalive\n\n');
+    }, 15_000);
+
     const timer = setTimeout(() => {
       if (!settled) {
         settled = true;
+        clearInterval(keepAlive);
         proc.kill('SIGTERM');
         res.write('data: [DONE]\n\n');
         res.end();
@@ -300,6 +307,7 @@ function handleStreaming(res, prompt, model, requestModel, requestId, systemProm
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      clearInterval(keepAlive);
       // Send finish chunk
       const doneChunk = makeChunk(requestId, requestModel, {}, 'stop');
       res.write(`data: ${JSON.stringify(doneChunk)}\n\n`);
@@ -313,6 +321,7 @@ function handleStreaming(res, prompt, model, requestModel, requestId, systemProm
       if (!settled) {
         settled = true;
         clearTimeout(timer);
+        clearInterval(keepAlive);
         proc.kill('SIGTERM');
         resolve();
       }
