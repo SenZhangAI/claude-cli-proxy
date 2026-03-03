@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 
 const PORT = parseInt(process.env.PORT || '3456');
 const DEFAULT_MODEL = process.env.DEFAULT_MODEL || 'sonnet';
-const TIMEOUT_MS = parseInt(process.env.TIMEOUT || '120') * 1000;
+const TIMEOUT_MS = parseInt(process.env.TIMEOUT || '360') * 1000;
 const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT || '3');
 const MAX_BUDGET = process.env.MAX_BUDGET || '0.5';
 
